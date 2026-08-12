@@ -1,0 +1,17 @@
+# Index to scan (strike-level ranking, NIFTY only)
+indices:
+  - "NIFTY"
+
+# Monte Carlo settings (simulate index price movement)
+simulation:
+  days_to_simulate: 5
+  num_iterations: 5000
+  lookback_days: 252        # Trading days of NIFTY history used to estimate mu and sigma
+
+# Scoring weights for ranking individual strikes
+scoring:
+  top_n_to_notify: 5
+  weights:
+    iv_score: 0.50            # Higher IV = more premium to collect
+    distance_score: 0.30      # Further OTM = safer strike
+    oi_score: 0.20            # Lower OI = less crowded trade
