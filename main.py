@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 
 from src.config_loader import load_config
-from src.data_fetcher import fetch_option_data
-from src.monte_carlo import run_monte_carlo
+from stockester_agent.tools.data_fetcher import fetch_option_data
+from stockester_agent.tools.monte_carlo import run_monte_carlo
 from src.scorer import rank_strikes, rank_strikes_buy
 from src.context import get_market_context
 from src.notifier import send_telegram_message
@@ -84,6 +84,8 @@ def _build_message(date_str, spot, ctx, sell_list, buy_list, mc_prob_up_pct, mc_
 
     lines.append(f"  PCR       : {ctx['pcr']}  ({ctx['pcr_signal']})")
     lines.append(f"  Max Pain  : ₹{ctx['max_pain']:,}" if ctx['max_pain'] else "  Max Pain  : N/A")
+    if ctx.get('expiry'):
+        lines.append(f"  <i>(PCR / Max Pain for {ctx['expiry']} expiry)</i>")
     lines.append(f"  Mean IV   : {ctx['iv_mean']}%")
     lines.append("")
 

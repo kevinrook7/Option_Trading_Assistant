@@ -10,7 +10,13 @@ Uses existing indicators.py for PCR, Max Pain, and mean IV.
 
 import yfinance as yf
 
-from src.indicators import calculate_max_pain, calculate_pcr, get_iv_percentile
+from stockester_agent.tools.indicators import (
+    calculate_max_pain,
+    calculate_pcr,
+    coerce_expiry,
+    get_iv_percentile,
+    get_nearest_expiry,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -52,25 +58,30 @@ def fetch_nifty_dma(short: int = 20, long: int = 50) -> tuple[float | None, floa
 # Aggregated context
 # ---------------------------------------------------------------------------
 
-def get_market_context(chain: dict, spot: float) -> dict:
+def get_market_context(chain: dict, spot: float, expiry=None) -> dict:
     """
     Collect all market context signals into a single dict.
+
+    PCR and Max Pain are computed for one expiry only (defaults to the nearest
+    expiry in the chain), since mixing expiries makes both numbers meaningless.
 
     Keys returned:
         vix         – India VIX (float or None)
         dma_20      – 20-day moving average (float or None)
         dma_50      – 50-day moving average (float or None)
         dma_signal  – 'Bullish' | 'Bearish' | 'Neutral' | 'N/A'
+        expiry      – expiry used for PCR / Max Pain (str 'dd-mm-yyyy' or None)
         pcr         – Put-Call Ratio (float)
         pcr_signal  – human-readable PCR interpretation (str)
         max_pain    – Max Pain strike (int or None)
         iv_mean     – Mean IV across the chain (float, %)
         iv_signal   – 'High IV' | 'Low IV' | 'Normal IV'
     """
+    expiry_dt      = coerce_expiry(expiry) or get_nearest_expiry(chain)
     vix            = fetch_india_vix()
     dma_20, dma_50 = fetch_nifty_dma()
-    pcr            = calculate_pcr(chain)
-    max_pain       = calculate_max_pain(chain, spot)
+    pcr            = calculate_pcr(chain, expiry=expiry_dt)
+    max_pain       = calculate_max_pain(chain, spot, expiry=expiry_dt)
     iv_mean        = get_iv_percentile(chain)   # returns mean IV * 100
 
     # DMA signal: spot position relative to both MAs
@@ -105,6 +116,7 @@ def get_market_context(chain: dict, spot: float) -> dict:
         'dma_20':     dma_20,
         'dma_50':     dma_50,
         'dma_signal': dma_signal,
+        'expiry':     expiry_dt.strftime('%d-%m-%Y') if expiry_dt is not None else None,
         'pcr':        round(pcr, 3),
         'pcr_signal': pcr_signal,
         'max_pain':   int(max_pain) if max_pain else None,
