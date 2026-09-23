@@ -3,6 +3,48 @@ from datetime import date
 
 import pandas as pd
 
+from src import config_loader
+
+
+# ---------------------------------------------------------------------------
+# Scoring weights
+# ---------------------------------------------------------------------------
+
+DEFAULT_WEIGHTS = (0.5, 0.3, 0.2)   # iv, distance, oi
+
+try:
+    _CONFIG = config_loader.load_config('config.yaml')
+except Exception as e:
+    print(f"scorer: config load failed ({e}); using default weights {DEFAULT_WEIGHTS}")
+    _CONFIG = {}
+
+
+def _score_weights() -> tuple[float, float, float]:
+    """
+    Return (iv_weight, distance_weight, oi_weight) from config['scoring']['weights'].
+
+    Accepts either a list of three floats [iv, distance, oi] or a mapping keyed
+    by iv_score / distance_score / oi_score. Falls back to DEFAULT_WEIGHTS when
+    the key is missing or unreadable.
+    """
+    raw = (_CONFIG.get('scoring') or {}).get('weights')
+
+    if isinstance(raw, (list, tuple)) and len(raw) == 3:
+        values = raw
+    elif isinstance(raw, dict):
+        keys = ('iv_score', 'distance_score', 'oi_score')
+        values = [raw.get(k, default) for k, default in zip(keys, DEFAULT_WEIGHTS)]
+    else:
+        if raw is not None:
+            print(f"scorer: unexpected scoring.weights {raw!r}; using {DEFAULT_WEIGHTS}")
+        return DEFAULT_WEIGHTS
+
+    try:
+        return tuple(float(v) for v in values)
+    except (TypeError, ValueError):
+        print(f"scorer: non-numeric scoring.weights {raw!r}; using {DEFAULT_WEIGHTS}")
+        return DEFAULT_WEIGHTS
+
 
 # ---------------------------------------------------------------------------
 # Expiry helpers
@@ -106,7 +148,8 @@ def rank_strikes(chain, spot, top_n=5):
     Rank liquid NIFTY OTM strikes for SELLING (premium collection).
 
     Expiry : last Tuesday of the current month (NIFTY 50 monthly settlement).
-    Scoring: iv_score×0.5  +  distance_score×0.3  +  oi_score×0.2
+    Scoring: weighted sum of iv_score, distance_score and oi_score, using the
+             weights from config.yaml (scoring.weights).
              Higher IV, further OTM, and lower OI (less crowded) is better.
 
     Returns list of dicts:
@@ -148,10 +191,11 @@ def rank_strikes(chain, spot, top_n=5):
     combined['distance_score'] = _maxnorm(combined['distance_pct'])
     combined['oi_score']       = 1 - _maxnorm(combined['openInterest'])
 
+    iv_w, distance_w, oi_w = _score_weights()
     combined['sell_score'] = (
-        combined['iv_score']       * 0.5 +
-        combined['distance_score'] * 0.3 +
-        combined['oi_score']       * 0.2
+        combined['iv_score']       * iv_w +
+        combined['distance_score'] * distance_w +
+        combined['oi_score']       * oi_w
     )
 
     result = []
@@ -178,7 +222,8 @@ def rank_strikes_buy(chain, spot, top_n=5):
     Rank liquid NIFTY OTM strikes for BUYING (momentum/directional trades).
 
     Expiry : nearest weekly expiry available in the chain.
-    Scoring: iv_score×0.5  +  distance_score×0.3  +  oi_score×0.2
+    Scoring: weighted sum of iv_score, distance_score and oi_score, using the
+             weights from config.yaml (scoring.weights).
              LOW IV (cheap), CLOSE to ATM, and HIGH OI (liquid) is better.
 
     R/R assumption: stop-loss at 50% of premium, target at 2× premium → R/R = 4.0.
@@ -223,10 +268,11 @@ def rank_strikes_buy(chain, spot, top_n=5):
     combined['distance_score'] = 1 - _maxnorm(combined['distance_pct'])
     combined['oi_score']       = _maxnorm(combined['openInterest'])
 
+    iv_w, distance_w, oi_w = _score_weights()
     combined['buy_score'] = (
-        combined['iv_score']       * 0.5 +
-        combined['distance_score'] * 0.3 +
-        combined['oi_score']       * 0.2
+        combined['iv_score']       * iv_w +
+        combined['distance_score'] * distance_w +
+        combined['oi_score']       * oi_w
     )
 
     # R/R: fixed stop=50% of premium, target=2× premium → reward/risk = 4.0

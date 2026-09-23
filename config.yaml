@@ -1,17 +1,27 @@
-# Index to scan (strike-level ranking, NIFTY only)
+# Index to scan
 indices:
   - "NIFTY"
 
-# Monte Carlo settings (simulate index price movement)
+# Monte Carlo simulation settings
 simulation:
   days_to_simulate: 5
   num_iterations: 5000
-  lookback_days: 252        # Trading days of NIFTY history used to estimate mu and sigma
+  lookback_days: 252
 
-# Scoring weights for ranking individual strikes
+# Notification settings
 scoring:
   top_n_to_notify: 5
-  weights:
-    iv_score: 0.50            # Higher IV = more premium to collect
-    distance_score: 0.30      # Further OTM = safer strike
-    oi_score: 0.20            # Lower OI = less crowded trade
+
+# Ollama LLM settings (change model here without editing code)
+ollama:
+  model: "qwen3:8b"
+  router_tokens: 512
+  analyst_tokens: 1024
+  context_window: 8192
+
+# Prediction evaluation horizons (hours after prediction timestamp)
+evaluation:
+  horizons_hours:
+    - 1
+    - 24
+    - 72
