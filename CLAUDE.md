@@ -83,7 +83,7 @@ START
 # Install dependencies
 .venv/Scripts/pip install -r requirements.txt
 
-# Run the scheduled pipeline (9:25 AM IST, Mon-Fri)
+# Run the scheduler (analysis 9:25 AM, evaluation 3:45 PM IST, Mon-Fri)
 python main.py
 
 # Run immediately (skips scheduler)
@@ -197,18 +197,24 @@ evaluation:
 
 ## Scheduler Behaviour
 
-APScheduler fires `run_scheduled_analysis()` in `main.py` at 9:25 AM IST on weekdays. This invokes the LangGraph agent with `notify_telegram=True`. The result is saved to SQLite and sent to Telegram automatically.
+`python main.py` runs two weekday APScheduler jobs (IST):
+
+- 09:25 — `run_scheduled_analysis()` invokes the LangGraph agent with `notify_telegram=True`. The result is saved to SQLite and sent to Telegram.
+- 15:45 — `run_evaluation()` from `evaluate_predictions.py` scores every (prediction × horizon) that has become due.
 
 ---
 
 ## Prediction Evaluation
 
-Run `python evaluate_predictions.py` to score past predictions:
+`evaluate_predictions.py` (scheduled by `main.py`, or run by hand) scores past predictions:
 
-1. Fetches current NIFTY price from yfinance.
-2. For each unevaluated prediction that is old enough for a configured horizon (1h, 24h, 72h), computes `price_return = (current - entry) / entry`.
-3. Marks `correct=1` if the direction matches the stance (bullish → positive return, bearish → negative return).
-4. Writes the result to `prediction_outcomes`.
+1. Entry price = linked `market_snapshots.spot` (fallback: yfinance price at prediction time).
+2. Price at `prediction_time + horizon` is looked up from yfinance hourly bars (last bar closed by then), so late runs give the same result as on-time ones.
+3. `correct=1` if direction matches stance (bullish → positive return, bearish → negative). Neutral always scores 0.
+4. If no bar closed between prediction and target (market shut for the whole horizon), `correct=NULL` and it's excluded from accuracy.
+5. One row per (prediction, horizon) in `prediction_outcomes` (unique index).
+
+Timestamps are stored as ISO-8601 UTC with a `T` separator; always compare with `datetime(timestamp)` in SQL, never as raw strings.
 
 Use `/performance` in Telegram to see accuracy statistics.
 
@@ -228,6 +234,8 @@ The agent is NOT fine-tuned on historical data. Instead:
 ## Mock Mode
 
 Set `MOCK_NSE=true` in `.env` or run `python run_agent.py --mock` to use synthetic option chain data instead of hitting NSE. This enables offline development and testing without network access or rate-limit risk.
+
+Mock runs are NOT saved to SQLite (the save node skips when `MOCK_NSE` is set), so synthetic predictions never get scored against real prices.
 
 ---
 

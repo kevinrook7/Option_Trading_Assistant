@@ -137,6 +137,8 @@ def handle_history(symbol: str = "NIFTY") -> None:
         stance = (p["stance"] or "?").capitalize()
         conf = f"{p['confidence']:.0%}" if p["confidence"] is not None else "?"
         correct = {1: "correct", 0: "wrong", None: "pending"}.get(p["correct"], "?")
+        if p.get("horizon_hours") is not None:
+            correct += f" @{p['horizon_hours']}h"
         ret = f"{p['return_pct']:+.2f}%" if p["return_pct"] is not None else ""
         lines.append(f"{ts}  {stance} ({conf})  [{correct}] {ret}")
 

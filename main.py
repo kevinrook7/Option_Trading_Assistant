@@ -1,18 +1,23 @@
 """
 main.py — scheduled entry point for the Stockester agent.
 
-The scheduler fires at 9:25 AM IST on weekdays and invokes the same
-LangGraph agent that Telegram uses. There is no separate analysis pipeline.
+The scheduler runs two weekday jobs (IST):
+  09:25  analysis   — invokes the same LangGraph agent that Telegram uses
+  15:45  evaluation — scores due predictions (evaluate_predictions.py)
 
 Usage
 -----
-  python main.py          # starts scheduler (9:25 AM IST, Mon-Fri)
-  python main.py --now    # run immediately (for testing)
+  python main.py          # starts scheduler
+  python main.py --now    # run analysis immediately (for testing)
   python main.py --test   # same as --now
 """
 
 import logging
 import sys
+
+# Emoji in log/print output crash cp1252 consoles when stdout is redirected
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 from langchain_core.messages import HumanMessage
 
@@ -78,6 +83,8 @@ if __name__ == "__main__":
         import pytz
         from apscheduler.schedulers.blocking import BlockingScheduler
 
+        from evaluate_predictions import run_evaluation
+
         scheduler = BlockingScheduler(timezone=pytz.timezone("Asia/Kolkata"))
         scheduler.add_job(
             run_scheduled_analysis,
@@ -85,9 +92,21 @@ if __name__ == "__main__":
             hour=9,
             minute=25,
             day_of_week="mon-fri",
+            misfire_grace_time=600,
+        )
+        # Evaluation looks prices up historically, so one run after the close
+        # covers every horizon that became due during the day.
+        scheduler.add_job(
+            run_evaluation,
+            "cron",
+            hour=15,
+            minute=45,
+            day_of_week="mon-fri",
+            misfire_grace_time=3600,
         )
 
         print("NIFTY agent scheduled for 9:25 AM IST every weekday.")
+        print("Prediction evaluation scheduled for 3:45 PM IST every weekday.")
         print("Press Ctrl+C to stop.")
 
         try:

@@ -174,6 +174,12 @@ def save_to_db(state: AgentState) -> dict:
     Save market snapshot and prediction to SQLite.
     Reads the validated analysis from state['analysis'].
     """
+    # Mock runs use synthetic prices; saving them would pollute agent memory
+    # and get scored against real market moves by evaluate_predictions.py.
+    if os.getenv("MOCK_NSE", "").lower() in ("true", "1", "yes"):
+        print("  [save] skipped (MOCK_NSE enabled)", flush=True)
+        return {"snapshot_id": None}
+
     analysis = state.get("analysis") or {}
     symbol = state.get("symbol", "NIFTY")
 
